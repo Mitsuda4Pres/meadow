@@ -8,10 +8,11 @@
 //4) Format terrain with symbols and colors
 
 
-
+#define FNL_IMPL
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "include/fastnoiselite.h"
 #ifdef _WIN32
 #include "ncursesw/ncurses.h"
 #endif
@@ -29,22 +30,9 @@ typedef struct{
 } player;
 
 int initializePlayer(player *p, char name[32]);
-int setTerrainToDot(chtype t[][80], int r){
-	for(int i = 0; i < r; i++){
-		for(int j = 0; j < 80; j++){
-			t[i][j] = '.' | COLOR_PAIR(3);
-		}
-	}
-	return 0;
-}
-
-void drawTerrain(chtype t[][80], int r){
-	for(int i = 0; i < r; i++){
-		for(int j = 0; j < 80; j++){
-			mvaddch(i, j, t[i][j]);
-		}
-	}
-}
+void setTerrainToDot(chtype t[][80], int r);
+void drawTerrain(chtype t[][80], int r);
+void generateFieldArea(chtype t[][80], int r);
 
 int main(int argc, char *argv[]){
 	chtype area1[24][80];
@@ -66,6 +54,7 @@ int main(int argc, char *argv[]){
 	player.imgchar = '@' | COLOR_PAIR(2);
 	mvprintw(10, 20, "Hello meadows! Press any key to continue...");		//curses version of printf. Print to "window" buffer.
 	getch();
+	generateFieldArea(area1, 24);
 	refresh();								//Dump all changes to window buffer on to screen
 	while(game_active == 1){				//27 is escape
 		//Draw
@@ -134,3 +123,63 @@ int initializePlayer(player *p, char name[32]){
 	p->imgchar = '@';	
 	return 0;
 }
+
+void setTerrainToDot(chtype t[][80], int r){
+	for(int i = 0; i < r; i++){
+		for(int j = 0; j < 80; j++){
+			t[i][j] = '.' | COLOR_PAIR(3);
+		}
+	}
+}
+
+void drawTerrain(chtype t[][80], int r){
+	for(int i = 0; i < r; i++){
+		for(int j = 0; j < 80; j++){
+			mvaddch(i, j, t[i][j]);
+		}
+	}
+}
+
+void generateFieldArea(chtype t[][80], int r){
+	fnl_state noise = fnlCreateState();
+	noise.noise_type = FNL_NOISE_OPENSIMPLEX2;
+
+	float *noise_data = malloc(240 * 800 * sizeof(float)); //for now, just the size of one screen, but eventually larger areas with edge scrolling.
+	int index = 0;
+	for(int i=0; i < 240; i++){
+		for(int j=0; j < 800; j++){
+			noise_data[index++] = fnlGetNoise2D(&noise, i, j);
+		}
+	}
+	//Process noise into valuse I can display on my map (integers 0-5)
+	for(int i=0; i < 24; i++){ 			//could sub 24 for r
+		for(int j=0; j < 80; j++){
+			//Average noise values (/100)
+			float avg=0.0;
+			for(int a=0; a<100; a++){
+				avg += noise_data[(((i*80)+j)*100)+a]; //Row * (80) Columns, + current column, *(100) item numbers, + current item number
+			}
+			avg /= 100.0; //divide by (100) items
+
+			//probably a faster way to do this
+			if(avg <= 1.0 && avg > 0.666)
+				t[i][j] = '0';
+			else if(avg <= 0.666 && avg > 0.333)
+				t[i][j] = '*';
+			else if(avg <= 0.333 && avg > 0.0)
+				t[i][j] = '.';
+			else if(avg <= 0.0 && avg > -0.333)
+				t[i][j] = '.';
+			else if(avg <= -0.333 && avg > -0.666)
+				t[i][j] = '*';
+			else if(avg <= -0.666 && avg >= -1)
+				t[i][j] = '0';
+			else
+				t[i][j] = 'x';	
+		}
+	}
+	free(noise_data);
+}
+
+
+
