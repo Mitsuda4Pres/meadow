@@ -16,7 +16,7 @@
 #include "ncursesw/ncurses.h"
 #endif
 #ifndef _WIN32
-#include <ncurses>
+#include <ncurses.h>
 #endif
 
 typedef struct{
