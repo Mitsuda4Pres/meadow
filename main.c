@@ -42,6 +42,7 @@ typedef struct{
 } player;
 
 typedef struct{
+	int state;			//1 - Start menu, 2 - Gameplay, 3 - Game over
 	int disp_width;
 	int disp_height;
 	vec2 viewport_pos; //top-left corner of viewport
@@ -50,18 +51,23 @@ typedef struct{
 } gameinfo;
 
 int initializePlayer(player *p, char name[32]);
-void setTerrainToDot(chtype t[][400], int r);		//debug: set area to all periods
-void drawTerrain(chtype t[][400], int disp_w, int disp_h, vec2 disp_origin);
-void generateFieldArea(chtype t[][400], int r);		//Field area 400x400
+void setTerrainToDot(chtype **t, int w, int h);		//debug: set area to all periods
+void setTerrainToTitleScreen(chtype **t, int w, int h);
+void drawTerrain(chtype **t, int w, int h, int disp_w, int disp_h, vec2 disp_origin);
+void generateFieldArea(chtype **t, int w, int h);		//Field area 400x400
+chtype **mallocNewArea(int w, int h);					//malloc a new area with dimensions by parameters. Return pointer to area matrix.
+WINDOW *create_newwin(int h, int w, int starty, int startx);
+void destroy_win(WINDOW *local_win);
 
 int main(int argc, char *argv[]){
-	chtype area1[400][400];
-	setTerrainToDot(area1, 24);
+	chtype **area1 = mallocNewArea(400, 400);
+	setTerrainToDot(area1, 400, 400);
 	int input;
 	chtype overch = ' ';						//Ascii char that the player is standing on, so it can be replaced when the player moves.
 	int game_active = 1;
 	player player;
 	gameinfo game;
+	game.state = 1;
 	game.viewport_pos.x = 190; 		//starting position of viewport
 	game.viewport_pos.y = 190; 		
 	game.disp_width = 80;
@@ -79,13 +85,14 @@ int main(int argc, char *argv[]){
 	init_pair(3, COLOR_GREEN, COLOR_BLACK);
 
 	player.imgchar = '@' | COLOR_PAIR(2);
-	mvprintw(10, 20, "Hello meadows! Press any key to continue...");		//curses version of printf. Print to "window" buffer.
+
+	mvprintw(game.disp_height/2, 20, "Hello meadows! Press any key to continue...");		//curses version of printf. Print to "window" buffer.
 	getch();
-	generateFieldArea(area1, 24);
+	generateFieldArea(area1, 400, 400);
 	refresh();								//Dump all changes to window buffer on to screen
 	while(game_active == 1){				//27 is escape
 		//Draw
-		drawTerrain(area1, game.disp_width, game.disp_height, game.viewport_pos);
+		drawTerrain(area1, 400, 400, game.disp_width, game.disp_height, game.viewport_pos);
 		if(mvinch(player.pos.y, player.pos.x) != player.imgchar){
 			mvaddch(player.prev_pos.y, player.prev_pos.x, overch);
 			overch = mvinch(player.pos.y, player.pos.x);
@@ -150,7 +157,7 @@ int main(int argc, char *argv[]){
 				break;
 			}
 			case 'r':{
-				generateFieldArea(area1, 24);
+				generateFieldArea(area1, 400, 400);
 			}
 			case '+':{
 				if(game.disp_width < DISP_MAX_WIDTH && game.disp_height < DISP_MAX_HEIGHT){
@@ -185,15 +192,16 @@ int initializePlayer(player *p, char name[32]){
 	return 0;
 }
 
-void setTerrainToDot(chtype t[][400], int r){
-	for(int i = 0; i < r; i++){
-		for(int j = 0; j < 400; j++){
+void setTerrainToDot(chtype **t, int w, int h){
+	for(int i = 0; i < h; i++){
+		for(int j = 0; j < w; j++){
 			t[i][j] = '.' | COLOR_PAIR(3);
 		}
 	}
 }
 
-void drawTerrain(chtype t[][400], int disp_w, int disp_h, vec2 disp_origin){
+//TODO: Do I need to add checks against the width/height of the area array? This is already being filtered once before calling.
+void drawTerrain(chtype **t, int w, int h, int disp_w, int disp_h, vec2 disp_origin){
 	for(int i = 0; i < disp_h; i++){
 		for(int j = 0; j < disp_w; j++){
 			mvaddch(i, j, t[i+disp_origin.y][j+disp_origin.x]);
@@ -202,23 +210,23 @@ void drawTerrain(chtype t[][400], int disp_w, int disp_h, vec2 disp_origin){
 }
 
 //Optimize with malloc for variable length
-void generateFieldArea(chtype t[][400], int r){
+void generateFieldArea(chtype **t, int w, int h){
 	srand(time(NULL));
 	int rand_seed = rand(); 
 	fnl_state noise = fnlCreateState();
 	noise.noise_type = FNL_NOISE_OPENSIMPLEX2;
 	noise.seed = rand_seed;
-	float *noise_data = malloc(400 * 400 * sizeof(float)); //for now, just the size of one screen, but eventually larger areas with edge scrolling.
+	float *noise_data = malloc(w * h * sizeof(float)); //for now, just the size of one screen, but eventually larger areas with edge scrolling.
 	int index = 0;
-	for(int i=0; i < 400; i++){
-		for(int j=0; j < 400; j++){
+	for(int i=0; i < h; i++){
+		for(int j=0; j < w; j++){
 			noise_data[index++] = fnlGetNoise2D(&noise, i, j);
 		}
 	}
 	//Process noise into valuse I can display on my map (integers 0-5)
-	for(int i=0; i < 400; i++){ 			//could sub 24 for r
-		for(int j=0; j < 400; j++){
-			float val = noise_data[(i*400)+j];
+	for(int i=0; i < h; i++){ 			//could sub 24 for r
+		for(int j=0; j < w; j++){
+			float val = noise_data[(i*w)+j];
 			//probably a faster way to do this
 			if(val <= 1.0 && val > 0.666)
 				t[i][j] = '0';
@@ -239,3 +247,65 @@ void generateFieldArea(chtype t[][400], int r){
 	free(noise_data);
 }
 
+chtype **mallocNewArea(int w, int h){
+	chtype **area = (chtype **)malloc(sizeof(chtype *) * h); //malloc rows (height of map) 
+	if(area == NULL){
+		perror("Unable to allocate memory for game world.");
+		return NULL;	
+	}
+	for(int i=0; i<h; i++){
+		area[i] = (chtype *)malloc(sizeof(chtype) * w);      //malloc w-amount of cells in for each row (width of map)
+		if(area[i] == NULL){
+			perror("Unable to allocate memory for game world.");
+			for(int j=0; j<i; j++){
+				free(area[j]);
+			}	
+			free(area);
+			return NULL;
+		}
+		memset(area[i], 'x', (sizeof(chtype)*w));			//Set all cells to 'x'
+	}
+	return area;
+}
+
+WINDOW *create_newwin(int h, int w, int starty, int startx){
+	WINDOW *local_win;
+
+	local_win = newwin(h, w, starty, startx);
+	box(local_win, 0, 0);		//0,0 is default border. Change border later
+	wrefresh(local_win);
+	return local_win;
+}
+
+void destroy_win(WINDOW *local_win){
+	wborder(local_win, ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ');
+	wrefresh(local_win);
+	delwin(local_win);
+}
+
+void setTerrainToTitleScreen(chtype **t, int w, int h){
+	//This is gonna be stupid.
+	t[2][6] = 'o';
+	t[3][4] = 'o'; t[3][7] = 'o';
+	t[4][2] = 'o'; t[4][6] = 'o'; t[4][9] = 'o'; t[4][10] = 'o'; t[4][18] = 'o'; t[4][51] = 'o';
+	t[5][1] = 'o'; t[5][5] = 'o'; t[5][7] = 'o'; t[5][11] = 'o'; t[5][16] = 'o'; t[5][19] = 'o'; t[5][50] = 'o'; t[5][52] = 'o';
+	t[6][0] = 'o'; t[6][5] = 'o'; t[6][6] = 'o'; t[6][12] = 'o'; t[6][14] = 'o'; t[6][20] = 'o'; t[6][50] = 'o'; t[6][52] = 'o';	
+	t[7][4] = 'o'; t[7][12] = 'o'; t[7][13] = 'o'; t[7][20] = 'o'; t[7][49] = 'o'; t[7][51] = 'o';	
+	t[8][4] = 'o'; t[8][12] = 'o'; t[8][21] = 'o'; t[8][26] = 'o'; t[8][27] = 'o'; t[8][28] = 'o'; t[8][29] = 'o'; t[8][36] = 'o'; t[8][37] = 'o'; t[8][37] = 'o'; 
+	t[8][49] = 'o' t[8][50] = 'o'; t[8][58] = 'o'; t[8][59] = 'o'; t[8][60] = 'o'; t[8][66] = 'o'; t[8][67] = 'o'; t[8][78] = 'o';	
+
+	t[6][0] = 'o'; t[6][5] = 'o'; t[6][6] = 'o'; t[6][12] = 'o'; t[6][14] = 'o'; t[6][20] = 'o'; t[6][50] = 'o'; t[6][52] = 'o';	
+	t[6][0] = 'o'; t[6][5] = 'o'; t[6][6] = 'o'; t[6][12] = 'o'; t[6][14] = 'o'; t[6][20] = 'o'; t[6][50] = 'o'; t[6][52] = 'o';	
+	t[6][0] = 'o'; t[6][5] = 'o'; t[6][6] = 'o'; t[6][12] = 'o'; t[6][14] = 'o'; t[6][20] = 'o'; t[6][50] = 'o'; t[6][52] = 'o';	
+	t[6][0] = 'o'; t[6][5] = 'o'; t[6][6] = 'o'; t[6][12] = 'o'; t[6][14] = 'o'; t[6][20] = 'o'; t[6][50] = 'o'; t[6][52] = 'o';	
+	t[6][0] = 'o'; t[6][5] = 'o'; t[6][6] = 'o'; t[6][12] = 'o'; t[6][14] = 'o'; t[6][20] = 'o'; t[6][50] = 'o'; t[6][52] = 'o';	
+	t[6][0] = 'o'; t[6][5] = 'o'; t[6][6] = 'o'; t[6][12] = 'o'; t[6][14] = 'o'; t[6][20] = 'o'; t[6][50] = 'o'; t[6][52] = 'o';	
+	t[6][0] = 'o'; t[6][5] = 'o'; t[6][6] = 'o'; t[6][12] = 'o'; t[6][14] = 'o'; t[6][20] = 'o'; t[6][50] = 'o'; t[6][52] = 'o';	
+	t[6][0] = 'o'; t[6][5] = 'o'; t[6][6] = 'o'; t[6][12] = 'o'; t[6][14] = 'o'; t[6][20] = 'o'; t[6][50] = 'o'; t[6][52] = 'o';	
+	t[6][0] = 'o'; t[6][5] = 'o'; t[6][6] = 'o'; t[6][12] = 'o'; t[6][14] = 'o'; t[6][20] = 'o'; t[6][50] = 'o'; t[6][52] = 'o';	
+	t[6][0] = 'o'; t[6][5] = 'o'; t[6][6] = 'o'; t[6][12] = 'o'; t[6][14] = 'o'; t[6][20] = 'o'; t[6][50] = 'o'; t[6][52] = 'o';	
+	t[6][0] = 'o'; t[6][5] = 'o'; t[6][6] = 'o'; t[6][12] = 'o'; t[6][14] = 'o'; t[6][20] = 'o'; t[6][50] = 'o'; t[6][52] = 'o';	
+	t[6][0] = 'o'; t[6][5] = 'o'; t[6][6] = 'o'; t[6][12] = 'o'; t[6][14] = 'o'; t[6][20] = 'o'; t[6][50] = 'o'; t[6][52] = 'o';	
+	t[6][0] = 'o'; t[6][5] = 'o'; t[6][6] = 'o'; t[6][12] = 'o'; t[6][14] = 'o'; t[6][20] = 'o'; t[6][50] = 'o'; t[6][52] = 'o';	
+
+}
