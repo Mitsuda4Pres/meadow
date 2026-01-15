@@ -50,14 +50,31 @@ typedef struct{
 	int current_area_name;
 } gameinfo;
 
-int initializePlayer(player *p, char name[32]);
-void setTerrainToDot(chtype **t, int w, int h);		//debug: set area to all periods
-void setTerrainToTitleScreen(chtype **t, int w, int h);
-void drawTerrain(chtype **t, int w, int h, int disp_w, int disp_h, vec2 disp_origin);
-void generateFieldArea(chtype **t, int w, int h);		//Field area 400x400
-chtype **mallocNewArea(int w, int h);					//malloc a new area with dimensions by parameters. Return pointer to area matrix.
+typedef struct{
+	chtype **terrain;
+	char name[64];
+	int width;
+	int height;
+	//other area attirbute here. Exits? Obj count? enemy count? World map orientation?
+} area;
+
 WINDOW *create_newwin(int h, int w, int starty, int startx);
 void destroy_win(WINDOW *local_win);
+
+//Game functions
+player createCharacter();
+int initializePlayer(player *p);
+void clearScreen();
+void setTerrainToDot(chtype **t, int w, int h);		//debug: set area to all periods
+void setTerrainToTitleScreen(chtype **t, int w, int h);
+chtype **mallocNewArea(int w, int h);					//malloc a new area with dimensions by parameters. Return pointer to area matrix.
+
+//Draw functions
+void drawTerrain(chtype **t, int w, int h, int disp_w, int disp_h, vec2 disp_origin);
+void drawStatusBar(gameinfo *g, player *p);
+
+//Procedural generation functions
+void generateFieldArea(chtype **t, int w, int h);		//Field area 400x400
 
 int main(int argc, char *argv[]){
 	chtype **area1 = mallocNewArea(400, 400);
@@ -73,7 +90,6 @@ int main(int argc, char *argv[]){
 	game.disp_width = 80;
 	game.disp_height = 24;
 	char name[32] = "Player1";
-	initializePlayer(&player, name);
 
 	initscr();						//ncurses mode on
 	cbreak();					
@@ -84,15 +100,24 @@ int main(int argc, char *argv[]){
 	init_pair(2, COLOR_CYAN, COLOR_BLACK);
 	init_pair(3, COLOR_GREEN, COLOR_BLACK);
 
-	player.imgchar = '@' | COLOR_PAIR(2);
+	
 
+	/*------------------------------*/
 	mvprintw(game.disp_height/2, 20, "Hello meadows! Press any key to continue...");		//curses version of printf. Print to "window" buffer.
+	refresh();
 	getch();
+	clearScreen();
+	move(0,0);
+	player = createCharacter();
+	initializePlayer(&player);
+	player.imgchar = '@' | COLOR_PAIR(2);
+	/*------------------------------*/
 	generateFieldArea(area1, 400, 400);
 	refresh();								//Dump all changes to window buffer on to screen
 	while(game_active == 1){				//27 is escape
 		//Draw
 		drawTerrain(area1, 400, 400, game.disp_width, game.disp_height, game.viewport_pos);
+		drawStatusBar(&game, &player);
 		if(mvinch(player.pos.y, player.pos.x) != player.imgchar){
 			mvaddch(player.prev_pos.y, player.prev_pos.x, overch);
 			overch = mvinch(player.pos.y, player.pos.x);
@@ -158,6 +183,12 @@ int main(int argc, char *argv[]){
 			}
 			case 'r':{
 				generateFieldArea(area1, 400, 400);
+				break;
+			}
+			case 'c':{
+				clearScreen();
+				getch();
+				break;
 			}
 			case '+':{
 				if(game.disp_width < DISP_MAX_WIDTH && game.disp_height < DISP_MAX_HEIGHT){
@@ -181,15 +212,35 @@ int main(int argc, char *argv[]){
 	return 0;
 }
 
+player createCharacter(){
+	player p;
+	move(0,0);
+	printw("What should I call you, who would begin this journey?\n");
+	getstr(p.name);
+	printw("Very well, %s. I anticipate I will have more questions for you later. As for now, see the world unfolding before you...\n");
+	getch();
+	return p;
+}
 
-int initializePlayer(player *p, char name[32]){
-	strcpy(p->name, name);
+int initializePlayer(player *p){
+	//strcpy(p->name, name);
 	p->pos.x = 39;
 	p->pos.y = 12;
 	p->prev_pos.x = 39;
 	p->prev_pos.y = 12;
 	p->imgchar = '@';	
 	return 0;
+}
+
+void clearScreen(){
+	move(0, 0);
+	int row, col;
+	getmaxyx(stdscr, row, col);
+	for(int i=0; i<row; i++){
+		for(int j=0; j<col; j++){
+			printw(" ");
+		}
+	}
 }
 
 void setTerrainToDot(chtype **t, int w, int h){
@@ -207,6 +258,11 @@ void drawTerrain(chtype **t, int w, int h, int disp_w, int disp_h, vec2 disp_ori
 			mvaddch(i, j, t[i+disp_origin.y][j+disp_origin.x]);
 		}
 	}
+}
+
+void drawStatusBar(gameinfo *g, player *p){
+	move(g->disp_height, 0);
+	printw("Name: %s", p->name);
 }
 
 //Optimize with malloc for variable length
@@ -292,7 +348,7 @@ void setTerrainToTitleScreen(chtype **t, int w, int h){
 	t[6][0] = 'o'; t[6][5] = 'o'; t[6][6] = 'o'; t[6][12] = 'o'; t[6][14] = 'o'; t[6][20] = 'o'; t[6][50] = 'o'; t[6][52] = 'o';	
 	t[7][4] = 'o'; t[7][12] = 'o'; t[7][13] = 'o'; t[7][20] = 'o'; t[7][49] = 'o'; t[7][51] = 'o';	
 	t[8][4] = 'o'; t[8][12] = 'o'; t[8][21] = 'o'; t[8][26] = 'o'; t[8][27] = 'o'; t[8][28] = 'o'; t[8][29] = 'o'; t[8][36] = 'o'; t[8][37] = 'o'; t[8][37] = 'o'; 
-	t[8][49] = 'o' t[8][50] = 'o'; t[8][58] = 'o'; t[8][59] = 'o'; t[8][60] = 'o'; t[8][66] = 'o'; t[8][67] = 'o'; t[8][78] = 'o';	
+	t[8][49] = 'o'; t[8][50] = 'o'; t[8][58] = 'o'; t[8][59] = 'o'; t[8][60] = 'o'; t[8][66] = 'o'; t[8][67] = 'o'; t[8][78] = 'o';	
 
 	t[6][0] = 'o'; t[6][5] = 'o'; t[6][6] = 'o'; t[6][12] = 'o'; t[6][14] = 'o'; t[6][20] = 'o'; t[6][50] = 'o'; t[6][52] = 'o';	
 	t[6][0] = 'o'; t[6][5] = 'o'; t[6][6] = 'o'; t[6][12] = 'o'; t[6][14] = 'o'; t[6][20] = 'o'; t[6][50] = 'o'; t[6][52] = 'o';	
