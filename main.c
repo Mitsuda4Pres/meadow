@@ -69,6 +69,10 @@ void setTerrainToDot(chtype **t, int w, int h);		//debug: set area to all period
 void setTerrainToTitleScreen(chtype **t, int w, int h);
 chtype **mallocNewArea(int w, int h);					//malloc a new area with dimensions by parameters. Return pointer to area matrix.
 
+int checkPlayerCollisionWithTerrain(player *p, chtype **terain){
+	
+}
+
 //Draw functions
 void drawTerrain(chtype **t, int w, int h, int disp_w, int disp_h, vec2 disp_origin);
 void drawStatusBar(gameinfo *g, player *p);
@@ -87,10 +91,6 @@ int main(int argc, char *argv[]){
 	game.state = 1;
 	game.viewport_pos.x = 190; 		//starting position of viewport
 	game.viewport_pos.y = 190; 		
-	game.disp_width = 80;
-	game.disp_height = 24;
-	char name[32] = "Player1";
-
 	initscr();						//ncurses mode on
 	cbreak();					
 	keypad(stdscr, TRUE);
@@ -100,10 +100,10 @@ int main(int argc, char *argv[]){
 	init_pair(2, COLOR_CYAN, COLOR_BLACK);
 	init_pair(3, COLOR_GREEN, COLOR_BLACK);
 
-	
+	getmaxyx(stdscr, game.disp_height, game.disp_width);
 
 	/*------------------------------*/
-	mvprintw(game.disp_height/2, 20, "Hello meadows! Press any key to continue...");		//curses version of printf. Print to "window" buffer.
+	mvprintw(game.disp_height/2, (game.disp_width/2)-22, "Hello meadows! Press any key to continue...");		//curses version of printf. Print to "window" buffer.
 	refresh();
 	getch();
 	clearScreen();
@@ -134,7 +134,7 @@ int main(int argc, char *argv[]){
 				break;
 			}
 			case KEY_UP:{
-				if(game.viewport_pos.y > 0){
+				if(game.viewport_pos.y > 0 && player.pos.y <= game.disp_height/2){
 					game.viewport_pos.y--;
 					//adjust player's world pos
 				}
@@ -146,11 +146,11 @@ int main(int argc, char *argv[]){
 				break;
 			}
 			case KEY_DOWN:{
-				if(game.viewport_pos.y+game.disp_height < 400){		//modify to use disp_height
+				if(game.viewport_pos.y+game.disp_height < 400 && player.pos.y >= game.disp_height/2){		//modify to use Area Height (add area metadata somewhere)
 					game.viewport_pos.y++;
-					//adjust [;ayer's world pos
+					//adjust player's world pos
 				}
-				else if(player.pos.y < 23){				//24 rows, first row is 0
+				else if(player.pos.y < game.disp_height){				//24 rows, first row is 0
 					player.prev_pos.y = player.pos.y;
 					player.prev_pos.x = player.pos.x;
 					player.pos.y++;
@@ -158,11 +158,11 @@ int main(int argc, char *argv[]){
 				break;
 			}
 			case KEY_RIGHT:{
-				if(game.viewport_pos.x + game.disp_width < 400){    //modify to use disp_width
+				if(game.viewport_pos.x + game.disp_width < 400 && player.pos.x >= game.disp_width/2){    //modify to use disp_width
 					game.viewport_pos.x++;
 					//adjust player's world_pos
 				}
-				else if(player.pos.x < 79){				//80 cols, first col is 0
+				else if(player.pos.x < game.disp_width){				//80 cols, first col is 0
 					player.prev_pos.y = player.pos.y;
 					player.prev_pos.x = player.pos.x;
 					player.pos.x++;
@@ -170,7 +170,7 @@ int main(int argc, char *argv[]){
 				break;
 			}
 			case KEY_LEFT:{
-				if(game.viewport_pos.x > 0){
+				if(game.viewport_pos.x > 0 && player.pos.x <= game.disp_width/2){
 					game.viewport_pos.x--;
 					//adjust player's porld pos
 				}
@@ -213,21 +213,31 @@ int main(int argc, char *argv[]){
 }
 
 player createCharacter(){
+	//Display in a window set at 0,0 to the disp_width, disp_height to give player an opportunity to set window size.
+	//This can be done again later from the main menu. Then take away ability to alter screen size in game.
+	nocbreak();
+	echo();
 	player p;
 	move(0,0);
 	printw("What should I call you, who would begin this journey?\n");
 	getstr(p.name);
-	printw("Very well, %s. I anticipate I will have more questions for you later. As for now, see the world unfolding before you...\n");
+	printw("Very well, %s. I anticipate I will have more questions for you later. As for now, see the world unfolding before you...\n", p.name);
+	noecho();
+	cbreak();
 	getch();
+	clearScreen();
 	return p;
 }
 
+
 int initializePlayer(player *p){
 	//strcpy(p->name, name);
-	p->pos.x = 39;
-	p->pos.y = 12;
-	p->prev_pos.x = 39;
-	p->prev_pos.y = 12;
+	int maxx, maxy;
+	getmaxyx(stdscr, maxy, maxx);
+	p->pos.x = maxx/2;
+	p->pos.y = maxy/2;
+	p->prev_pos.x = maxx/2;
+	p->prev_pos.y = maxy/2;
 	p->imgchar = '@';	
 	return 0;
 }
@@ -261,8 +271,8 @@ void drawTerrain(chtype **t, int w, int h, int disp_w, int disp_h, vec2 disp_ori
 }
 
 void drawStatusBar(gameinfo *g, player *p){
-	move(g->disp_height, 0);
-	printw("Name: %s", p->name);
+	move(g->disp_height-1, 0);
+	printw("  Name: %s   ", p->name);
 }
 
 //Optimize with malloc for variable length
