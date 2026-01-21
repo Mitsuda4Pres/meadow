@@ -41,14 +41,6 @@ typedef struct{
 	
 } player;
 
-typedef struct{
-	int state;			//1 - Start menu, 2 - Gameplay, 3 - Game over
-	int disp_width;
-	int disp_height;
-	vec2 viewport_pos; //top-left corner of viewport
-	int current_area_index;
-	int current_area_name;
-} gameinfo;
 
 typedef struct{
 	chtype **terrain;
@@ -57,6 +49,14 @@ typedef struct{
 	int height;
 	//other area attirbute here. Exits? Obj count? enemy count? World map orientation?
 } area;
+
+typedef struct{
+	int state;			//1 - Start menu, 2 - Gameplay, 3 - Game over
+	int disp_width;
+	int disp_height;
+	vec2 viewport_pos; //top-left corner of viewport
+	area current_area;
+} gameinfo;
 
 WINDOW *create_newwin(int h, int w, int starty, int startx);
 void destroy_win(WINDOW *local_win);
@@ -67,10 +67,13 @@ int initializePlayer(player *p);
 void clearScreen();
 void setTerrainToDot(chtype **t, int w, int h);		//debug: set area to all periods
 void setTerrainToTitleScreen(chtype **t, int w, int h);
-chtype **mallocNewArea(int w, int h);					//malloc a new area with dimensions by parameters. Return pointer to area matrix.
+chtype **mallocNewTerrain(int w, int h);					//malloc a new area with dimensions by parameters. Return pointer to area matrix.
+area createNewArea(char name[64], int width, int height);
 
-int checkPlayerCollisionWithTerrain(player *p, chtype **terain){
-	
+//use p.world_pos to check collision
+int checkPlayerCollisionWithTerrain(player *p, chtype **terrain){
+	//if(terrain[p->world_pos.y][p->world_pos.x] == )
+	return 0;
 }
 
 //Draw functions
@@ -81,16 +84,17 @@ void drawStatusBar(gameinfo *g, player *p);
 void generateFieldArea(chtype **t, int w, int h);		//Field area 400x400
 
 int main(int argc, char *argv[]){
-	chtype **area1 = mallocNewArea(400, 400);
-	setTerrainToDot(area1, 400, 400);
+	//chtype **area1 = mallocNewArea(400, 400);
+	char a1name[64] = "First Meadow";
+	area area1 = createNewArea(a1name, 400, 400);
+	setTerrainToDot(area1.terrain, 400, 400);
 	int input;
 	chtype overch = ' ';						//Ascii char that the player is standing on, so it can be replaced when the player moves.
 	int game_active = 1;
 	player player;
 	gameinfo game;
+	game.current_area = area1;
 	game.state = 1;
-	game.viewport_pos.x = 190; 		//starting position of viewport
-	game.viewport_pos.y = 190; 		
 	initscr();						//ncurses mode on
 	cbreak();					
 	keypad(stdscr, TRUE);
@@ -110,13 +114,20 @@ int main(int argc, char *argv[]){
 	move(0,0);
 	player = createCharacter();
 	initializePlayer(&player);
+	// while(area1.terrain[player.world_pos.y][player.world_pos.x] != '.' && player.world_pos.x < area1.width){
+	// 	player.world_pos.x++;
+	// 	if(player.world_pos.x)
+	// }
+	game.viewport_pos.x = player.world_pos.x - (game.disp_width/2);
+	game.viewport_pos.y = player.world_pos.y - (game.disp_height/2);
+
 	player.imgchar = '@' | COLOR_PAIR(2);
 	/*------------------------------*/
-	generateFieldArea(area1, 400, 400);
+	generateFieldArea(area1.terrain, 400, 400);
 	refresh();								//Dump all changes to window buffer on to screen
 	while(game_active == 1){				//27 is escape
 		//Draw
-		drawTerrain(area1, 400, 400, game.disp_width, game.disp_height, game.viewport_pos);
+		drawTerrain(game.current_area.terrain, 400, 400, game.disp_width, game.disp_height, game.viewport_pos);
 		drawStatusBar(&game, &player);
 		if(mvinch(player.pos.y, player.pos.x) != player.imgchar){
 			mvaddch(player.prev_pos.y, player.prev_pos.x, overch);
@@ -134,55 +145,67 @@ int main(int argc, char *argv[]){
 				break;
 			}
 			case KEY_UP:{
-				if(game.viewport_pos.y > 0 && player.pos.y <= game.disp_height/2){
-					game.viewport_pos.y--;
-					//adjust player's world pos
-				}
-				else if(player.pos.y > 0){
-					player.prev_pos.y = player.pos.y;
-					player.prev_pos.x = player.pos.x;
-					player.pos.y--;
+				if(player.world_pos.y > 0){
+					player.world_pos.y--;
+					if(game.viewport_pos.y > 0 && player.pos.y <= game.disp_height/2){
+						game.viewport_pos.y--;
+						//adjust player's world pos
+					}
+					else if(player.pos.y > 0){
+						player.prev_pos.y = player.pos.y;
+						player.prev_pos.x = player.pos.x;
+						player.pos.y--;
+					}
 				}
 				break;
 			}
 			case KEY_DOWN:{
-				if(game.viewport_pos.y+game.disp_height < 400 && player.pos.y >= game.disp_height/2){		//modify to use Area Height (add area metadata somewhere)
-					game.viewport_pos.y++;
-					//adjust player's world pos
-				}
-				else if(player.pos.y < game.disp_height){				//24 rows, first row is 0
-					player.prev_pos.y = player.pos.y;
-					player.prev_pos.x = player.pos.x;
-					player.pos.y++;
+				if(player.world_pos.y < game.current_area.height-1){
+					player.world_pos.y++;
+					if(game.viewport_pos.y+game.disp_height < 400 && player.pos.y >= game.disp_height/2){		//modify to use Area Height (add area metadata somewhere)
+						game.viewport_pos.y++;
+						//adjust player's world pos
+					}
+					else if(player.pos.y < game.disp_height){				//24 rows, first row is 0
+						player.prev_pos.y = player.pos.y;
+						player.prev_pos.x = player.pos.x;
+						player.pos.y++;
+					}
 				}
 				break;
 			}
 			case KEY_RIGHT:{
-				if(game.viewport_pos.x + game.disp_width < 400 && player.pos.x >= game.disp_width/2){    //modify to use disp_width
-					game.viewport_pos.x++;
-					//adjust player's world_pos
-				}
-				else if(player.pos.x < game.disp_width){				//80 cols, first col is 0
-					player.prev_pos.y = player.pos.y;
-					player.prev_pos.x = player.pos.x;
-					player.pos.x++;
+				if(player.world_pos.x < game.current_area.width-1){
+					player.world_pos.x++;
+					if(game.viewport_pos.x + game.disp_width < 400 && player.pos.x >= game.disp_width/2){    //modify to use disp_width
+						game.viewport_pos.x++;
+						//adjust player's world_pos
+					}
+					else if(player.pos.x < game.disp_width){				//80 cols, first col is 0
+						player.prev_pos.y = player.pos.y;
+						player.prev_pos.x = player.pos.x;
+						player.pos.x++;
+					}
 				}
 				break;
 			}
 			case KEY_LEFT:{
-				if(game.viewport_pos.x > 0 && player.pos.x <= game.disp_width/2){
-					game.viewport_pos.x--;
-					//adjust player's porld pos
-				}
-				else if(player.pos.x > 0){
-					player.prev_pos.y = player.pos.y;
-					player.prev_pos.x = player.pos.x;
-					player.pos.x--;
+				if(player.world_pos.x > 0){
+					player.world_pos.x--;
+					if(game.viewport_pos.x > 0 && player.pos.x <= game.disp_width/2){
+						game.viewport_pos.x--;
+						//adjust player's porld pos
+					}
+					else if(player.pos.x > 0){
+						player.prev_pos.y = player.pos.y;
+						player.prev_pos.x = player.pos.x;
+						player.pos.x--;
+					}
 				}
 				break;
 			}
 			case 'r':{
-				generateFieldArea(area1, 400, 400);
+				generateFieldArea(game.current_area.terrain, 400, 400);
 				break;
 			}
 			case 'c':{
@@ -231,6 +254,9 @@ player createCharacter(){
 
 
 int initializePlayer(player *p){
+	p->world_pos.x = 200;
+	p->world_pos.y = 350;
+	
 	//strcpy(p->name, name);
 	int maxx, maxy;
 	getmaxyx(stdscr, maxy, maxx);
@@ -272,7 +298,7 @@ void drawTerrain(chtype **t, int w, int h, int disp_w, int disp_h, vec2 disp_ori
 
 void drawStatusBar(gameinfo *g, player *p){
 	move(g->disp_height-1, 0);
-	printw("  Name: %s   ", p->name);
+	printw("  Name: %s    World Pos: %d, %d   ", p->name, p->world_pos.x, p->world_pos.y);
 }
 
 //Optimize with malloc for variable length
@@ -313,25 +339,34 @@ void generateFieldArea(chtype **t, int w, int h){
 	free(noise_data);
 }
 
-chtype **mallocNewArea(int w, int h){
-	chtype **area = (chtype **)malloc(sizeof(chtype *) * h); //malloc rows (height of map) 
-	if(area == NULL){
+chtype **mallocNewTerrain(int w, int h){
+	chtype **t = (chtype **)malloc(sizeof(chtype *) * h); //malloc rows (height of map) 
+	if(t == NULL){
 		perror("Unable to allocate memory for game world.");
 		return NULL;	
 	}
 	for(int i=0; i<h; i++){
-		area[i] = (chtype *)malloc(sizeof(chtype) * w);      //malloc w-amount of cells in for each row (width of map)
-		if(area[i] == NULL){
+		t[i] = (chtype *)malloc(sizeof(chtype) * w);      //malloc w-amount of cells in for each row (width of map)
+		if(t[i] == NULL){
 			perror("Unable to allocate memory for game world.");
 			for(int j=0; j<i; j++){
-				free(area[j]);
+				free(t[j]);
 			}	
-			free(area);
+			free(t);
 			return NULL;
 		}
-		memset(area[i], 'x', (sizeof(chtype)*w));			//Set all cells to 'x'
+		memset(t[i], 'x', (sizeof(chtype)*w));			//Set all cells to 'x'
 	}
-	return area;
+	return t;
+}
+
+area createNewArea(char name[64], int width, int height){
+	area a;
+	strcpy(a.name, name);
+	a.width = width;
+	a.height = height;
+	a.terrain = mallocNewTerrain(width, height);
+	return a;
 }
 
 WINDOW *create_newwin(int h, int w, int starty, int startx){
