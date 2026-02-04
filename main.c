@@ -6,7 +6,30 @@
 //2) Create a data structure for holding the world
 //3) Generate terrain within the data structure
 //4) Format terrain with symbols and colors
-
+//
+//
+//
+//Architecture:
+//Meadow will be comprised of 9 large field segments, essentially laid out in a grid. The exit locations will vary, but field 1 exits N, S, E, W, and the other grids exit to their connections. Certain
+//areas have towns between them. In certain fields there are dungeons that can be entered. The only area that is spawned on game start is field 1. After that, new areas are spawned
+//upon entrance. How then are these areas stored? Everything needs to be written to FILE, in wb so as to prevent tampering. Clearly all this data can be held very easily in RAM, so for now I'll
+//just rely on that during runtime. When expanding to SDL, if it then no longer makes sense, loading thresholds will need to be applied to load only the current area then transition to the next
+//by loading from the file.
+//All character and progres data will be held in RAM of course, then written on Save/Quit.
+//
+//Player initialization needs to have the world already made then choose a point in the level that is "passable" to stand on, but also not locked in. The latter may be a potential bug that I can work
+//on when it arises. With the current simplex generation its unlikely to happen.
+//
+//Game start flow:
+//--Intro
+//--Create character
+//--Generate first area
+//--(Check all exits are accessible, regenerate/alter map if not)
+//--Place char at X/Y
+//--check for collision
+//--(check for path from start pos to exit)
+//--IF non-passable, expand outward in concentric circle for acceptable starting point.
+//--Place player and begin.
 
 #define FNL_IMPL
 #include <stdio.h>
@@ -80,13 +103,14 @@ void drawStatusBar(gameinfo *g, player *p);
 //Procedural generation functions
 void generateFieldArea(chtype **t, int w, int h);		//Field area 400x400
 
+
+
+//--------------------------------------------------------------MAIN---------------------------------------------------------//
 int main(int argc, char *argv[]){
-	chtype **area1 = mallocNewArea(400, 400);
-	setTerrainToDot(area1, 400, 400);
+	//Game initialization
 	int input;
-	chtype overch = ' ';						//Ascii char that the player is standing on, so it can be replaced when the player moves.
 	int game_active = 1;
-	player player;
+
 	gameinfo game;
 	game.state = 1;
 	game.viewport_pos.x = 190; 		//starting position of viewport
@@ -101,6 +125,14 @@ int main(int argc, char *argv[]){
 	init_pair(3, COLOR_GREEN, COLOR_BLACK);
 
 	getmaxyx(stdscr, game.disp_height, game.disp_width);
+	
+	//Display new/load screen
+	//Call relevant function from player choice
+	
+	//Add to New Game or Load Game functions
+	chtype overch = ' ';						//Ascii char that the player is standing on, so it can be replaced when the player moves.
+	player player;
+
 
 	/*------------------------------*/
 	mvprintw(game.disp_height/2, (game.disp_width/2)-22, "Hello meadows! Press any key to continue...");		//curses version of printf. Print to "window" buffer.
@@ -112,8 +144,14 @@ int main(int argc, char *argv[]){
 	initializePlayer(&player);
 	player.imgchar = '@' | COLOR_PAIR(2);
 	/*------------------------------*/
+	//call these from a function, as not every game will start with area generation.
+	chtype **area1 = mallocNewArea(400, 400);
+	setTerrainToDot(area1, 400, 400);
 	generateFieldArea(area1, 400, 400);
 	refresh();								//Dump all changes to window buffer on to screen
+										
+	//GAME LOOP
+	//Draw, input, process updates
 	while(game_active == 1){				//27 is escape
 		//Draw
 		drawTerrain(area1, 400, 400, game.disp_width, game.disp_height, game.viewport_pos);
